@@ -2,7 +2,9 @@
 # Carl O'Beirne
 # Analysis of Ambulance Responses
 
-# Packages
+###########
+
+########### Packages ###########
 library("data.table")
 library("zipcode")
 library("caret")
@@ -11,39 +13,17 @@ library("ROSE")
 library("leaflet")
 library("tidyverse")
 
-# Read Datasets
+########### Read Datasets ###########
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T)
-NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", sep = ",", stringsAsFactors = T)
+NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsAsFactors = T) # No longer required to be read
 
-# Functions
-# Obtain Latitude & Longitude from Zip Code
-NYC_EMS_MapSample <- sample(1:nrow(NYC_EMS_Data), 80000, replace = F)
-NYC_EMS_MapSample <- NYC_EMS_Data[NYC_EMS_MapSample, ]
+############################################ 
 
-data("zipcode")
-
-for (i in 1:nrow(NYC_EMS_MapSample)){
-    if(length(zipcode$zip[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]) == 1){
-        NYC_EMS_MapSample$Latitude[i] <- zipcode$latitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
-        NYC_EMS_MapSample$Longitude[i] <- zipcode$longitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
-        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", TRUE))
-    }else{
-        NYC_EMS_MapSample$Latitude[i] <- NA
-        NYC_EMS_MapSample$Longitude[i] <- NA
-        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", FALSE))
-    }
-}
-
-fwrite(NYC_EMS_MapSample, "Data/NYC_EMS_MapData.csv", row.names = F)# Saving the file
-
-rm(i)
-rm(zipcode)
-
-# Data Types
+########### Data Cleansing DFB ###########
 str(DFB_EMS_Data)
-str(NYC_EMS_Data)
 
-# Data Cleansing DFB
+DFB_EMS_Data <- DFB_EMS_Data[, -c(2,19,20,21,23,25,27,29,31,33,35,37,39,41)]
+
 DFB_EMS_Data[DFB_EMS_Data == ''] <- NA # Changing unrecognized Blanks to NA Values
 
 DFB_EMS_Data <- data.frame(DFB_EMS_Data) # Convert back to Data Frame
@@ -52,10 +32,32 @@ DFB_EMS_Data <- data.frame(DFB_EMS_Data) # Convert back to Data Frame
 sapply(DFB_EMS_Data, function(x) sum(is.na(x)))
 
 # Removing Obs with NA values in particular variables
-DFB_EMS_Data <- DFB_EMS_Data[complete.cases(DFB_EMS_Data[, c(5,7,11:13,15)]), ] # Removing obs with blanks
+DFB_EMS_Data <- DFB_EMS_Data[complete.cases(DFB_EMS_Data[, c(4,6,10:12,14)]), ] # Removing obs with blanks
 
-# Data Cleansing NYC
-# Changing T/F values to Y/N
+DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins < 360) # Removing data where call length > 10 hours
+############################################
+
+########### Data Cleansing NYC ###########
+str(NYC_EMS_Data)
+
+# Dropping level in borough - set as unknown and there are only 5 boroughs
+NYC_EMS_RFSample$BOROUGH <- droplevels(NYC_EMS_RFSample$BOROUGH, 6)
+
+# Removing final call type unknown
+
+NYC_EMS_Data <- subset(NYC_EMS_Data, FINAL_CALL_TYPE != 'UNKNOW')
+
+# Changing date format
+NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p", tx = "UTC")
+
+# Reducing data to just 2017/2018
+NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31"), ]
+
+# Changing T/F values to Y/N for consistency
+NYC_EMS_Data$HELD_INDICATOR <- gsub('false', 'N', NYC_EMS_Data$HELD_INDICATOR)
+NYC_EMS_Data$HELD_INDICATOR <- gsub('true', 'Y', NYC_EMS_Data$HELD_INDICATOR)
+NYC_EMS_Data$HELD_INDICATOR <- as.factor(NYC_EMS_Data$HELD_INDICATOR)
+
 NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC <- gsub('false', 'N', NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC)
 NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC <- gsub('true', 'Y', NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC)
 NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC <- as.factor(NYC_EMS_Data$VALID_DISPATCH_RSPNS_TIME_INDC)
@@ -85,34 +87,73 @@ NYC_EMS_Data[NYC_EMS_Data == ''] <- NA # Changing unrecognized Blanks to NA Valu
 
 NYC_EMS_Data <- data.frame(NYC_EMS_Data)
 
-NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p", tx = "UTC")
-
-NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31"), ]
 #Checking for NA Values
 sapply(NYC_EMS_Data, function(x) sum(is.na(x)))
 
-NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(7,10,11,13:17,19,22:27)]), ] # Removing obs with blanks
+NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(13,14,19,23:27)]), ] # Removing obs with blanks
+
+# Removing irrelevant columns
+NYC_EMS_Data <- NYC_EMS_Data[, -c(8,12)]
 
 # Saving Cleaned File for quicker reading
 fwrite(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
-NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T)
-#Analysis
 
-# Model 1 - RF to Predict whether the incident will be Reopened in NYC
+############################################
+
+########### Functions ###########
+# Obtain Latitude & Longitude from Zip Code
+NYC_EMS_MapSample <- sample(1:nrow(NYC_EMS_Data), 80000, replace = F)
+NYC_EMS_MapSample <- NYC_EMS_Data[NYC_EMS_MapSample, ]
+
+data("zipcode")
+
+for (i in 1:nrow(NYC_EMS_MapSample)){
+    if(length(zipcode$zip[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]) == 1){
+        NYC_EMS_MapSample$Latitude[i] <- zipcode$latitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
+        NYC_EMS_MapSample$Longitude[i] <- zipcode$longitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
+        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", TRUE))
+    }else{
+        NYC_EMS_MapSample$Latitude[i] <- NA
+        NYC_EMS_MapSample$Longitude[i] <- NA
+        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", FALSE))
+    }
+}
+
+fwrite(NYC_EMS_MapSample, "Data/NYC_EMS_MapData.csv", row.names = F)# Saving the file
+
+rm(i)
+rm(zipcode)
+
+# Function to find the mode for any data
+findMode <- function(x){
+    uniqueVals <- unique(x)
+    uniqueVals[which.max(tabulate(match(x, uniqueVals)))]
+}
+
+############################################
+
+########### Reading Cleaned NYC Data ###########
+NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T)
+NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T)
+
+########### Start of Analysis ###########
+
+########### Model 1 - RF to Predict whether the incident will be Reopened in NYC ###########
 
 #NYC RF Sample
 set.seed(16326186) # Reproducability
-index <- sample(1:nrow(NYC_EMS_Data), 20000, replace = F)
+index <- sample(1:nrow(NYC_EMS_Data), 50000, replace = F)
 NYC_EMS_RFSample <- NYC_EMS_Data[index, ]
-
-NYC_EMS_RFSample$BOROUGH <- droplevels(NYC_EMS_RFSample$BOROUGH, 6)
 
 sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
 
 str(NYC_EMS_RFSample)
-NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7,10,11,15:17,22)]
+NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7,9,10,13:15)]
 
-NYC_EMS_RFSample$POLICEPRECINCT <- as.factor(NYC_EMS_RFSample$POLICEPRECINCT)
+NYC_EMS_RFSample <- NYC_EMS_RFSample[, -2]
+
+
+NYC_EMS_RFSample$FINAL_SEVERITY_LEVEL_CODE <- as.factor(NYC_EMS_RFSample$FINAL_SEVERITY_LEVEL_CODE)
 
 # Create Train & Test Data
 set.seed(16326186) # Reproducability
@@ -122,46 +163,34 @@ nycTest <- NYC_EMS_RFSample[-index, ]
 
 rm(index)
 
-
-nyc_rf_model <- randomForest(POLICEPRECINCT ~., nycTrain)
+nyc_rf_model <- randomForest(HELD_INDICATOR ~., nycTrain)
 
 varImpPlot(nyc_rf_model)
 
 nyc_rf_pred <- predict(nyc_rf_model, nycTest)
 
-table(nycTest$TRANSFER_INDICATOR)
-table(nycTrain$TRANSFER_INDICATOR)
+table(nycTest$HELD_INDICATOR)
+table(nycTrain$HELD_INDICATOR)
 
 
-confusionMatrix(nyc_rf_pred, nycTest$BOROUGH)
+confusionMatrix(nyc_rf_pred, nycTest$HELD_INDICATOR, positive = 'Y')
 
-# SMOTE
-reopen <- sample(2, nrow(NYC_EMS_RFSample), replace = T, prob = c(0.7,0.3))
-train <- NYC_EMS_RFSample[reopen==1, ]
-test <- NYC_EMS_RFSample[reopen==2, ]
+# ROSE (Random Over Sampling)
+# Oversampling with Rose
+index <- sample(2, nrow(NYC_EMS_RFSample), replace = T, prob = c(0.75,0.25))
+roseTrain <- NYC_EMS_RFSample[index == 1, ]
+roseTest <- NYC_EMS_RFSample[index == 2, ]
 
-table(train$REOPEN_INDICATOR)
-prop.table(table(train$REOPEN_INDICATOR))
-summary(train$REOPEN_INDICATOR)
+heldup <- ovun.sample(HELD_INDICATOR ~., data=roseTrain, method = "over", N = 71660)$data
+table(heldup$HELD_INDICATOR)
 
 #Creating Model
-rfTrain <- randomForest(FINAL_SEVERITY_LEVEL_CODE ~., train)
-rfOver <- randomForest(REOPEN_INDICATOR ~., over)
+rfTrainRose <- randomForest(HELD_INDICATOR ~., heldup)
 
 #Evaluate Model with Test Data
-confusionMatrix(predict(rfOver, test), test$REOPEN_INDICATOR)
+rosePred <- predict(rfTrainRose, roseTest)
 
-# ROSE
-table(train$REOPEN_INDICATOR)
-
-
-over <- ovun.sample(REOPEN_INDICATOR ~., data=train, method = "over", N = 138898)$data
-
-table(over$REOPEN_INDICATOR)
-
-rfModel <- randomForest(REOPEN_INDICATOR ~., over)
-rfPred <- predict(rfModel, test) 
-str()
+confusionMatrix(rosePred, roseTest$HELD_INDICATOR, positive = 'Y')
 
 # Mapping
 NYC_EMS_MapData <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",")
@@ -178,7 +207,7 @@ rm(NYC_EMS_MapData)
 
 # Analysis of Call types & Call duration
 NYC_CallSev_Times <- NYC_EMS_Data[, c(6,14)]
-DFB_CallSev_Times <- DFB_EMS_Data[, c(17,18,36, 42)]
+DFB_CallSev_Times <- DFB_EMS_Data[, c(1, 17, 18, 36, 42)]
 
 index <- sample(1:nrow(NYC_CallSev_Times), 15000, replace = F)
 NYC_CallSev_Times <- NYC_CallSev_Times[index, ]
@@ -188,20 +217,8 @@ DFB_CallSev_Times <- DFB_CallSev_Times[index, ]
 rm(index)
 
 fwrite(NYC_CallSev_Times, "Data/NYC_CallSev_Times.csv", row.names = F)
-fwrite(DFB_CallSev_Times, "Data/DFB_CallSev_Times.csv", row.names = F)
+fwrite(DFB_CallSev_Times, "Data/DFB_CallSev_Times.xlsx", row.names = F)
 
 
-mean(DFB_EMS_Data$TOC_IA_Mins)
-median(DFB_EMS_Data$TOC_IA_Mins)
-which.max(tabulate(DFB_EMS_Data$TOC_IA_Mins))
 
-max(DFB_EMS_Data$TOC_CD_Mins)/60
 
-findMode <- function(x){
-    uniqueVals <- unique(x)
-    uniqueVals[which.max(tabulate(match(x, uniqueVals)))]
-}
-
-findMode(DFB_EMS_Data$Criticality_Code)
-
-DFB_CallSev_Times <- subset(DFB_CallSev_Times, TOC_CD_Mins < 750)
