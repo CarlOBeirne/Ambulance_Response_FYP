@@ -23,7 +23,7 @@ NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsA
 ########### Data Cleansing DFB ###########
 str(DFB_EMS_Data)
 
-DFB_EMS_Data$Date <- as.POSIXct(DFB_EMS_Data$Date, format = "%m/%d/%Y") # Changning data format to readable R date format
+DFB_EMS_Data$Date <- as.POSIXct(DFB_EMS_Data$Date, format = "%d/%m/%Y") # Changning data format to readable R date format
 
 DFB_EMS_Data <- DFB_EMS_Data[, -c(2,19,20,21,23,25,27,29,31,33,35,37,39,41)]
 
@@ -35,7 +35,7 @@ DFB_EMS_Data <- DFB_EMS_Data[complete.cases(DFB_EMS_Data[, c(4,6,10:12,14)]), ] 
 
 max(DFB_EMS_Data$TOC_IA_Mins)
 
-DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins <= 360 & TOC_IA_Mins <= 360) # Removing data where call length > 10 hours
+DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins <= 360 & TOC_IA_Mins <= 360) # Removing data where call length > 6 hours
 ############################################
 
 ########### Data Cleansing NYC ###########
@@ -218,10 +218,13 @@ DFB_CallSev_Times <- DFB_EMS_Data[, c(1, 16,17, 25, 28)]
 
 index <- sample(1:nrow(NYC_CallSev_Times), 15000, replace = F)
 NYC_CallSev_Times <- NYC_CallSev_Times[index, ]
+
 index <- sample(1:nrow(DFB_CallSev_Times), 5000, replace = F)
 DFB_CallSev_Times <- DFB_CallSev_Times[index, ]
 
 rm(index)
+
+table(DFB_CallSev_Times$Criticality_Code)
 
 fwrite(NYC_CallSev_Times, "Data/NYC_CallSev_Times.csv", row.names = F)
 fwrite(DFB_CallSev_Times, "Data/DFB_CallSev_Times.csv", row.names = F)
@@ -229,7 +232,7 @@ fwrite(DFB_CallSev_Times, "Data/DFB_CallSev_Times.csv", row.names = F)
 DFB_2017 <- DFB_EMS_Data
 DFB_2017 <- DFB_EMS_Data[ DFB_2017$Date >= as.POSIXct("2017-01-01") & DFB_2017$Date <= as.POSIXct("2017-12-31"), ]
 
-
+sd(DFB_CallSev_Times[DFB_CallSev_Times$Criticality_Code == 'E', ]$TOC_IA_Mins)
 ########### Analysis Results ###########
 # Held up RF model
 varImpPlot(nyc_rf_model)
@@ -251,3 +254,16 @@ ggplot(DFB_Top_10_Areas, aes(x = District, y = count)) +
             subtitle = "by No. of Calls")+
     theme_economist_white()
     
+# Time Series Testing
+TOC_TimeSeries_DFB <- data.frame(DFB_EMS_Data$Date, DFB_EMS_Data$TOC, DFB_EMS_Data$Criticality_Code)
+TOC_TimeSeries_DFB$DateTimeTOC <- paste(TOC_TimeSeries_DFB$DFB_EMS_Data.Date, TOC_TimeSeries_DFB$DFB_EMS_Data.TOC)
+
+str(TOC_TimeSeries_DFB)
+
+TOC_TimeSeries_DFB$DateTimeTOC <- as.POSIXct(TOC_TimeSeries_DFB$DateTimeTOC, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+
+TOC_TimeSeries_DFB <- subset(TOC_TimeSeries_DFB, DateTimeTOC >= "2017-12-25 00:00:00" & DateTimeTOC <= "2017-12-31 23:59:59")
+
+plot.ts(TOC_TimeSeries_DFB$DateTimeTOC)
+
+plot(ts(TOC_TimeSeries_DFB, frequency = 1))
