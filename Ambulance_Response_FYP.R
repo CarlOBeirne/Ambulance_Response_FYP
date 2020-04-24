@@ -49,10 +49,10 @@ NYC_EMS_Data$BOROUGH <- droplevels(NYC_EMS_Data$BOROUGH, "UNKNOWN")
 NYC_EMS_Data <- subset(NYC_EMS_Data, FINAL_CALL_TYPE != 'UNKNOW')
 
 # Changing date format
-NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p", tx = "UTC")
+NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %H:%M:%S")
 
 # Reducing data to just 2017/2018
-NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31"), ]
+NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31 23:59:59"), ]
 
 # Changing T/F values to Y/N for consistency
 NYC_EMS_Data$HELD_INDICATOR <- gsub('false', 'N', NYC_EMS_Data$HELD_INDICATOR)
@@ -97,9 +97,9 @@ NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(13,14,18,19,23:27)]
 NYC_EMS_Data <- NYC_EMS_Data[, -c(8,12)]
 
 # Saving Cleaned File for quicker reading
-fwrite(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
-fwrite(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
-;############################################
+write.csv(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
+write.csv(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
+############################################
 
 ########### Functions ###########
 # Obtain Latitude & Longitude from Zip Code
@@ -134,7 +134,7 @@ findMode <- function(x){
 ############################################
 
 ########### Reading Cleaned NYC Data ###########
-NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T)
+NYC_EMS_Data <- read.csv("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T)
 NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T)
 
 ########### Start of Analysis ###########
@@ -205,9 +205,20 @@ NYC_EMS_MapData <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",")
 NYC_EMS_MapData_Sample <- sample(1:nrow(NYC_EMS_MapData), 4000, replace = F)
 NYC_EMS_MapData_Sample <- NYC_EMS_MapData[NYC_EMS_MapData_Sample, ]
 
-NYC_Call_Map <- leaflet() %>%
+# FDNY EMS Calls in Cluster Map
+leaflet() %>%
     addTiles() %>%
-    addMarkers(lat = NYC_EMS_MapData_Sample$Latitude, lng = NYC_EMS_MapData_Sample$Longitude, popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE)
+    addCircleMarkers( lat = NYC_EMS_MapData_Sample$Latitude, 
+                      lng = NYC_EMS_MapData_Sample$Longitude,
+                      popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE,
+                      clusterOptions = markerClusterOptions())
+
+# FDNY EMS Calls Map
+leaflet() %>%
+    addTiles() %>%
+    addMarkers( lat = NYC_EMS_MapData_Sample$Latitude, 
+                      lng = NYC_EMS_MapData_Sample$Longitude,
+                      popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE)
 
 rm(NYC_EMS_MapData_Sample)
 rm(NYC_EMS_MapData)
@@ -240,30 +251,36 @@ heldupCM
 
 ############################################
 
-# Top 10 Areas DFB
+# Top 5 Final Call Types by Borough FDNY EMS
 
-DFB_Top_10_Areas <- DFB_EMS_Data %>%
-    group_by(District) %>%
+NYC_TOP_5_CALL <- NYC_EMS_Data %>%
+    group_by(BOROUGH, FINAL_CALL_TYPE) %>%
     summarise(count = n()) %>%
-    top_n(n = 10, wt = count)
+    top_n(n = 5, wt = count)
 
-ggplot(DFB_Top_10_Areas, aes(x = District, y = count)) +
-    geom_col(col = rainbow(10), 
-             bg = rainbow(10)) +
-    ggtitle(label = "Top 10 Regions",
-            subtitle = "by No. of Calls")+
+ggplot(NYC_TOP_5_CALL, aes(x = FINAL_CALL_TYPE, y = count)) +
+    geom_col() +
+    ggtitle(label = "Top 5 Call Categories",
+            subtitle = "by Borough") +
+    facet_grid(~BOROUGH, scales = "free")+
     theme_economist_white()
-    
-# Time Series Testing
-TOC_TimeSeries_DFB <- data.frame(DFB_EMS_Data$Date, DFB_EMS_Data$TOC, DFB_EMS_Data$Criticality_Code)
-TOC_TimeSeries_DFB$DateTimeTOC <- paste(TOC_TimeSeries_DFB$DFB_EMS_Data.Date, TOC_TimeSeries_DFB$DFB_EMS_Data.TOC)
 
-str(TOC_TimeSeries_DFB)
 
-TOC_TimeSeries_DFB$DateTimeTOC <- as.POSIXct(TOC_TimeSeries_DFB$DateTimeTOC, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+# NYC Response Times
+NYC_Response_Times <- data.frame(NYC_EMS_Data$INCIDENT_DATETIME,NYC_EMS_Data$FINAL_SEVERITY_LEVEL_CODE, NYC_EMS_Data$INCIDENT_RESPONSE_SECONDS_QY, NYC_EMS_Data$INCIDENT_TRAVEL_TM_SECONDS_QY)
 
-TOC_TimeSeries_DFB <- subset(TOC_TimeSeries_DFB, DateTimeTOC >= "2017-12-25 00:00:00" & DateTimeTOC <= "2017-12-31 23:59:59")
+NYC_Response_Times$NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY <- round(NYC_Response_Times$NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY / 60, 2)
 
-plot.ts(TOC_TimeSeries_DFB$DateTimeTOC)
+NYC_Response_Times$NYC_EMS_Data.INCIDENT_TRAVEL_TM_SECONDS_QY <- round(NYC_Response_Times$NYC_EMS_Data.INCIDENT_TRAVEL_TM_SECONDS_QY / 60, 2)
 
-plot(ts(TOC_TimeSeries_DFB, frequency = 1))
+summary(NYC_Response_Times)
+
+table(NYC_Response_Times$NYC_EMS_Data.FINAL_SEVERITY_LEVEL_CODE)
+mean(NYC_Response_Times$NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY)
+
+NYC_Response_Times <- subset(NYC_Response_Times, NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY <= 360)
+
+
+boxplot(NYC_Response_Times)
+
+write.csv(NYC_Response_Times, "Data/NYC_Response_Times.csv", row.names = F)
