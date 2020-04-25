@@ -13,6 +13,8 @@ library("ROSE")
 library("leaflet")
 library("tidyverse")
 library("ggthemes")
+library("leaflet.extras")
+library("magrittr")
 
 ########### Read Datasets ########### 
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings= "")
@@ -59,7 +61,9 @@ NYC_EMS_Data$BOROUGH <- droplevels(NYC_EMS_Data$BOROUGH, "UNKNOWN")
 NYC_EMS_Data <- subset(NYC_EMS_Data, FINAL_CALL_TYPE != 'UNKNOW')
 
 # Changing date format
-NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %H:%M:%S")
+NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p")
+
+NYC2019 <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2019-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2019-12-31 23:59:59"), ]
 
 # Reducing data to just 2017/2018
 NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31 23:59:59"), ]
@@ -208,7 +212,7 @@ rm(heldup)
 # Mapping
 NYC_EMS_MapData <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",")
 
-NYC_EMS_MapData_Sample <- sample(1:nrow(NYC_EMS_MapData), 4000, replace = F)
+NYC_EMS_MapData_Sample <- sample(1:nrow(NYC_EMS_MapData), 10000, replace = F)
 NYC_EMS_MapData_Sample <- NYC_EMS_MapData[NYC_EMS_MapData_Sample, ]
 
 # FDNY EMS Calls in Cluster Map
@@ -225,6 +229,13 @@ leaflet() %>%
     addMarkers( lat = NYC_EMS_MapData_Sample$Latitude, 
                       lng = NYC_EMS_MapData_Sample$Longitude,
                       popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE)
+
+leaflet() %>%
+    addTiles() %>%
+    addHeatmap( lat = NYC_EMS_MapData$Latitude, 
+                lng = NYC_EMS_MapData$Longitude,
+                blur = 25,
+                radius = 15)
 
 rm(NYC_EMS_MapData_Sample)
 rm(NYC_EMS_MapData)
@@ -285,8 +296,5 @@ table(NYC_Response_Times$NYC_EMS_Data.FINAL_SEVERITY_LEVEL_CODE)
 mean(NYC_Response_Times$NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY)
 
 NYC_Response_Times <- subset(NYC_Response_Times, NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY <= 360)
-
-
-boxplot(NYC_Response_Times)
 
 write.csv(NYC_Response_Times, "Data/NYC_Response_Times.csv", row.names = F)
