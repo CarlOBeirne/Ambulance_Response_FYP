@@ -14,9 +14,15 @@ library("leaflet")
 library("tidyverse")
 library("ggthemes")
 
-########### Read Datasets ###########
+########### Read Datasets ########### 
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings= "")
 NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsAsFactors = T) # No longer required to be read
+###############################################
+
+########### Reading Cleaned NYC Data ###########
+NYC_EMS_Data <- read.csv("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
+DFB_EMS_Data <- read.csv("Data/NEW_DFB_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
+NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
 
 ############################################ 
 
@@ -33,9 +39,13 @@ sapply(DFB_EMS_Data, function(x) sum(is.na(x)))
 # Removing Obs with NA values in particular variables
 DFB_EMS_Data <- DFB_EMS_Data[complete.cases(DFB_EMS_Data[, c(4,6,10:12,14)]), ] # Removing obs with blanks
 
-max(DFB_EMS_Data$TOC_IA_Mins)
+DFB_EMS_Data$Date <- as.POSIXct(paste(DFB_EMS_Data$Date,DFB_EMS_Data$TOC))
 
 DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins <= 360 & TOC_IA_Mins <= 360) # Removing data where call length > 6 hours
+
+# Saving cleaned file for faster readoing
+write.csv(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
+
 ############################################
 
 ########### Data Cleansing NYC ###########
@@ -91,14 +101,14 @@ NYC_EMS_Data <- data.frame(NYC_EMS_Data)
 #Checking for NA Values
 sapply(NYC_EMS_Data, function(x) sum(is.na(x)))
 
-NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(13,14,18,19,23:27)]), ] # Removing obs with blanks
+NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(13,14,18,19,20,23:27)]), ] # Removing obs with blanks
 
 # Removing irrelevant columns
 NYC_EMS_Data <- NYC_EMS_Data[, -c(8,12)]
 
 # Saving Cleaned File for quicker reading
 write.csv(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
-write.csv(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
+
 ############################################
 
 ########### Functions ###########
@@ -132,10 +142,6 @@ findMode <- function(x){
 }
 
 ############################################
-
-########### Reading Cleaned NYC Data ###########
-NYC_EMS_Data <- read.csv("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T)
-NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T)
 
 ########### Start of Analysis ###########
 
