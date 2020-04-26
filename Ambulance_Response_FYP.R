@@ -15,6 +15,7 @@ library("tidyverse")
 library("ggthemes")
 library("leaflet.extras")
 library("magrittr")
+library("e1071")
 
 ########### Read Datasets ########### 
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings= "")
@@ -163,9 +164,12 @@ NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7:9,10,13:15)]
 
 # Create Train & Test Data
 set.seed(16326186) # Reproducability
+
 index <- sample(1:nrow(NYC_EMS_RFSample), 0.75*nrow(NYC_EMS_RFSample), replace = F )
-nycTrain <- NYC_EMS_RFSample[index, ]
-nycTest <- NYC_EMS_RFSample[-index, ]
+nycTrainRF <- NYC_EMS_RFSample[index, ]
+nycTestRF <- NYC_EMS_RFSample[-index, -4]
+
+actualHeldUpRF <- NYC_EMS_RFSample[-index, 4]
 
 rm(index)
 
@@ -175,12 +179,13 @@ varImpPlot(nyc_rf_model)
 
 nyc_rf_pred <- predict(nyc_rf_model, nycTest)
 
-heldupCM <- confusionMatrix(nyc_rf_pred, nycTest$HELD_INDICATOR, positive = 'Y')
+confusionMatrix(nyc_rf_pred, actualHeldUp)
 
 rm(nyc_rf_pred)
 rm(nycTest)
 rm(nycTrain)
 rm(NYC_EMS_RFSample)
+
 # ROSE (Random Over Sampling Examples)
 # Oversampling with Rose
 index <- sample(2, nrow(NYC_EMS_RFSample), replace = T, prob = c(0.75,0.25))
@@ -209,6 +214,39 @@ rm(roseTrain)
 rm(rfTrainRose)
 rm(heldup)
 
+########### ML Model 2 - NB to Predict whether the incident will be held up ###########
+# NYC RF Sample
+set.seed(16326186) # Reproducability
+index <- sample(1:nrow(NYC_EMS_Data), 300000, replace = F)
+NYC_EMS_RFSample <- NYC_EMS_Data[index, ]
+
+sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
+
+str(NYC_EMS_RFSample)
+NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7:9,10,13:15)]
+
+NYC_EMS_RFSample <- NYC_EMS_RFSample[complete.cases(NYC_EMS_RFSample[, 20]),]
+
+sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
+
+# Creating Train & Test Set
+set.seed(16326186) # Reproducability
+
+index <- sample(1:nrow(NYC_EMS_RFSample), 0.75*nrow(NYC_EMS_RFSample), replace = F )
+nycTrainNB <- NYC_EMS_RFSample[index, ]
+nycTestNB <- NYC_EMS_RFSample[-index, -4]
+
+actualHeldUpNB <- NYC_EMS_RFSample[-index, 4]
+
+rm(index)
+
+nb_model <- naiveBayes(HELD_INDICATOR ~., nycTrain)
+
+nb_pred <- predict(nb_model, nycTest)
+
+confusionMatrix(nb_pred, actualHeldUp)
+
+##################################################################################
 # Mapping
 NYC_EMS_MapData <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",")
 
