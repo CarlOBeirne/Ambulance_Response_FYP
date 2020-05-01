@@ -16,10 +16,11 @@ library("ggthemes")
 library("leaflet.extras")
 library("magrittr")
 library("e1071")
+library("mlbench")
 
 ########### Read Datasets ########### 
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings= "")
-NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsAsFactors = T) # No longer required to be read
+NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsAsFactors = T, na.strings = "") # No longer required to be read
 ###############################################
 
 ########### Reading Cleaned NYC Data ###########
@@ -37,14 +38,14 @@ DFB_EMS_Data$Date <- as.POSIXct(DFB_EMS_Data$Date, format = "%d/%m/%Y") # Changn
 DFB_EMS_Data <- DFB_EMS_Data[, -c(2,19,20,21,23,25,27,29,31,33,35,37,39,41)]
 
 # Checking for NA values
-sapply(DFB_EMS_Data, function(x) sum(is.na(x)))
+sapply(DFB_EMS_Data, function(x) sum(is.na(x))) # Make sure there are no NA values
 
 # Removing Obs with NA values in particular variables
 DFB_EMS_Data <- DFB_EMS_Data[complete.cases(DFB_EMS_Data[, c(4,6,10:12,14)]), ] # Removing obs with blanks
 
 DFB_EMS_Data$Date <- as.POSIXct(paste(DFB_EMS_Data$Date,DFB_EMS_Data$TOC))
 
-DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins <= 360 & TOC_IA_Mins <= 360) # Removing data where call length > 6 hours
+DFB_EMS_Data <- subset(DFB_EMS_Data, TOC_CD_Mins <= 360 & TOC_IA_Mins <= 360 & AH_MAV_Mins <= 360) # Removing data where call length > 6 hours
 
 # Saving cleaned file for faster readoing
 write.csv(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
@@ -64,7 +65,7 @@ NYC_EMS_Data <- subset(NYC_EMS_Data, FINAL_CALL_TYPE != 'UNKNOW')
 # Changing date format
 NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p")
 
-NYC2019 <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2019-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2019-12-31 23:59:59"), ]
+# NYC2019 <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2019-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2019-12-31 23:59:59"), ] # Only created to get the number of calls made in 2019 for results in report
 
 # Reducing data to just 2017/2018
 NYC_EMS_Data <- NYC_EMS_Data[ NYC_EMS_Data$INCIDENT_DATETIME >= as.POSIXct("2017-01-01 00:00:00") & NYC_EMS_Data$INCIDENT_DATETIME <= as.POSIXct("2018-12-31 23:59:59"), ]
@@ -98,15 +99,10 @@ NYC_EMS_Data$TRANSFER_INDICATOR <- gsub('false', 'N', NYC_EMS_Data$TRANSFER_INDI
 NYC_EMS_Data$TRANSFER_INDICATOR <- gsub('true', 'Y', NYC_EMS_Data$TRANSFER_INDICATOR)
 NYC_EMS_Data$TRANSFER_INDICATOR <- as.factor(NYC_EMS_Data$TRANSFER_INDICATOR)
 
-#Creating NA values where they are not detected
-NYC_EMS_Data[NYC_EMS_Data == ''] <- NA # Changing unrecognized Blanks to NA Values
-
-NYC_EMS_Data <- data.frame(NYC_EMS_Data)
-
 #Checking for NA Values
-sapply(NYC_EMS_Data, function(x) sum(is.na(x)))
+sapply(NYC_EMS_Data, function(x) sum(is.na(x))) # Make sure there are no NA values
 
-NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(13,14,18,19,20,23:27)]), ] # Removing obs with blanks
+NYC_EMS_Data <- NYC_EMS_Data[complete.cases(NYC_EMS_Data[, c(7,10,11,13:17,19,20,22:27)]), ] # Removing obs with blanks
 
 # Removing irrelevant columns
 NYC_EMS_Data <- NYC_EMS_Data[, -c(8,12)]
@@ -118,8 +114,7 @@ write.csv(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
 
 ########### Functions ###########
 # Obtain Latitude & Longitude from Zip Code
-NYC_EMS_MapSample <- sample(1:nrow(NYC_EMS_Data), 80000, replace = F)
-NYC_EMS_MapSample <- NYC_EMS_Data[NYC_EMS_MapSample, ]
+NYC_EMS_MapSample <- NYC_EMS_Data
 
 data("zipcode")
 
@@ -127,16 +122,17 @@ for (i in 1:nrow(NYC_EMS_MapSample)){
     if(length(zipcode$zip[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]) == 1){
         NYC_EMS_MapSample$Latitude[i] <- zipcode$latitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
         NYC_EMS_MapSample$Longitude[i] <- zipcode$longitude[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]
-        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", TRUE))
+        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", TRUE, Sys.time()))
     }else{
         NYC_EMS_MapSample$Latitude[i] <- NA
         NYC_EMS_MapSample$Longitude[i] <- NA
-        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", FALSE))
+        print(paste("Row: ",i, "Zip Code: ",NYC_EMS_MapSample$ZIPCODE[i],NYC_EMS_MapSample$Latitude[i],NYC_EMS_MapSample$Longitude[i], "Status: ", FALSE, Sys.time()))
+        
     }
 }
 
 fwrite(NYC_EMS_MapSample, "Data/NYC_EMS_MapData.csv", row.names = F)# Saving the file
-
+Sys.time()
 rm(i)
 rm(zipcode)
 
@@ -150,20 +146,22 @@ findMode <- function(x){
 
 ########### Start of Analysis ###########
 
-########### Model 1 - RF to Predict whether the incident will be Reopened in NYC ###########
+########### Model 1 - RF to Predict whether the incident will be HELDUP in NYC ###########
 
 #NYC RF Sample
-set.seed(16326186) # Reproducability
+set.seed(546513) # Reproducability
 index <- sample(1:nrow(NYC_EMS_Data), 300000, replace = F)
 NYC_EMS_RFSample <- NYC_EMS_Data[index, ]
 
-sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
+sapply(NYC_EMS_RFSample, function(x) sum(is.na(x))) # Make sure there are no NA values
+
 
 str(NYC_EMS_RFSample)
-NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7:9,10,13:15)]
+
+NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7:10,13:15,20)] # Removing variables with factors > 53 levels & unrelated variables
 
 # Create Train & Test Data
-set.seed(16326186) # Reproducability
+set.seed(325146) # Reproducability
 
 index <- sample(1:nrow(NYC_EMS_RFSample), 0.75*nrow(NYC_EMS_RFSample), replace = F )
 nycTrainRF <- NYC_EMS_RFSample[index, ]
@@ -173,30 +171,36 @@ actualHeldUpRF <- NYC_EMS_RFSample[-index, 4]
 
 rm(index)
 
-nyc_rf_model <- randomForest(HELD_INDICATOR ~., nycTrain)
+nyc_rf_model <- randomForest(HELD_INDICATOR ~., nycTrainRF)
 
 varImpPlot(nyc_rf_model)
 
-nyc_rf_pred <- predict(nyc_rf_model, nycTest)
+nyc_rf_pred <- predict(nyc_rf_model, nycTestRF)
 
-confusionMatrix(nyc_rf_pred, actualHeldUp)
+heldupCMRF <- confusionMatrix(nyc_rf_pred, actualHeldUpRF, positive = "Y")
+
+heldupCMRF
 
 rm(nyc_rf_pred)
-rm(nycTest)
-rm(nycTrain)
-rm(NYC_EMS_RFSample)
+rm(nycTestRF)
+rm(nycTrainRF)
+rm(nyc_rf_model)
+rm(actualHeldUpRF)
 
 # ROSE (Random Over Sampling Examples)
 # Oversampling with Rose
+set.seed(69745)
 index <- sample(2, nrow(NYC_EMS_RFSample), replace = T, prob = c(0.75,0.25))
 roseTrain <- NYC_EMS_RFSample[index == 1, ]
-roseTest <- NYC_EMS_RFSample[index == 2, ]
+roseTest <- NYC_EMS_RFSample[index == 2, -4 ]
+
+actualHeldUpROSE <- NYC_EMS_RFSample[index == 2, 4]
 
 rm(index)
 
-table(nycTrain$HELD_INDICATOR)
+table(roseTrain$HELD_INDICATOR) # See how many obs there are for each class
 
-heldup <- ovun.sample(HELD_INDICATOR ~., data=roseTrain, method = "over", N = 429574)$data
+heldup <- ovun.sample(HELD_INDICATOR ~., data=roseTrain, method = "over", N = 428594)$data # Oversample the most frequent 
 
 table(heldup$HELD_INDICATOR)
 
@@ -206,49 +210,239 @@ rfTrainRose <- randomForest(HELD_INDICATOR ~., heldup)
 #Evaluate Model with Test Data
 rosePred <- predict(rfTrainRose, roseTest)
 
-roseHeldupCM <- confusionMatrix(rosePred, roseTest$HELD_INDICATOR, positive = 'Y')
+heldupRoseCM <- confusionMatrix(rosePred, actualHeldUpROSE, positive = "Y")
+
+heldupRoseCM
 
 rm(rosePred)
 rm(roseTest)
 rm(roseTrain)
 rm(rfTrainRose)
 rm(heldup)
+rm(actualHeldUpROSE)
+rm(NYC_EMS_RFSample)
 
 ########### ML Model 2 - NB to Predict whether the incident will be held up ###########
-# NYC RF Sample
-set.seed(16326186) # Reproducability
+# NYC NB Sample
+set.seed(215145) # Reproducability
 index <- sample(1:nrow(NYC_EMS_Data), 300000, replace = F)
-NYC_EMS_RFSample <- NYC_EMS_Data[index, ]
+NYC_EMS_NBSample <- NYC_EMS_Data[index, ]
 
-sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
+sapply(NYC_EMS_NBSample, function(x) sum(is.na(x))) # Make sure there are no NA values
 
-str(NYC_EMS_RFSample)
-NYC_EMS_RFSample <- NYC_EMS_RFSample[, -c(1:5,7:9,10,13:15)]
-
-NYC_EMS_RFSample <- NYC_EMS_RFSample[complete.cases(NYC_EMS_RFSample[, 20]),]
-
-sapply(NYC_EMS_RFSample, function(x) sum(is.na(x)))
+str(NYC_EMS_NBSample)
+NYC_EMS_NBSample <- NYC_EMS_NBSample[, -c(1:5,7:9,10,13:15)]
 
 # Creating Train & Test Set
-set.seed(16326186) # Reproducability
+set.seed(234158) # Reproducability
 
-index <- sample(1:nrow(NYC_EMS_RFSample), 0.75*nrow(NYC_EMS_RFSample), replace = F )
-nycTrainNB <- NYC_EMS_RFSample[index, ]
-nycTestNB <- NYC_EMS_RFSample[-index, -4]
+index <- sample(1:nrow(NYC_EMS_NBSample), 0.75*nrow(NYC_EMS_NBSample), replace = F )
+nycTrainNB <- NYC_EMS_NBSample[index, ]
+nycTestNB <- NYC_EMS_NBSample[-index, -4]
 
-actualHeldUpNB <- NYC_EMS_RFSample[-index, 4]
+actualHeldUpNB <- NYC_EMS_NBSample[-index, 4]
 
 rm(index)
 
-nb_model <- naiveBayes(HELD_INDICATOR ~., nycTrain)
+nb_model <- naiveBayes(HELD_INDICATOR ~., nycTrainNB)
 
-nb_pred <- predict(nb_model, nycTest)
+nb_pred <- predict(nb_model, nycTestNB)
 
-confusionMatrix(nb_pred, actualHeldUp)
+heldupNBCM <- confusionMatrix(nb_pred, actualHeldUpNB, positive = "Y")
+
+heldupNBCM
+
+rm(nb_pred)
+rm(actualHeldUpNB)
+rm(nycTestNB)
+rm(nycTrainNB)
+rm(NYC_EMS_NBSample)
+rm(nb_model)
 
 ##################################################################################
+
+########### ML Model 3 - SVM to Predict whether the incident will be held up ###########
+NYC_EMS_SVMSample <- NYC_EMS_Data
+
+sapply(NYC_EMS_SVMSample, function(x) sum(is.na(x))) # Make sure there are no NA values
+# NYC SVM Sample
+set.seed(65451) # Reproducability
+index <- sample(1:nrow(NYC_EMS_Data), 20000, replace = F)
+NYC_EMS_SVMSample <- NYC_EMS_Data[index, ]
+
+rm(index)
+
+str(NYC_EMS_SVMSample)
+NYC_EMS_SVMSample_Numbers <- NYC_EMS_SVMSample[, c(6,8,11,12,16,17,20:25)] # Keeping Just Numeric Columns for SVM
+
+rm(NYC_EMS_SVMSample)
+
+str(NYC_EMS_SVMSample_Numbers)
+sapply(NYC_EMS_SVMSample_Numbers, function(x) sum(is.na(x)))
+
+set.seed(65451)
+index <- createDataPartition(
+    NYC_EMS_SVMSample_Numbers$HELD_INDICATOR,
+    p = .75,
+    list = F
+)
+svm_train <- NYC_EMS_SVMSample_Numbers[index, ]
+svm_test <- NYC_EMS_SVMSample_Numbers[-index, ]
+
+rm(index)
+
+# Linear Based SVM with Tuning Grid #
+Cost <- 2^c(1:8)
+Cost
+
+set.seed(65451)
+svm_gt_control <- trainControl(
+    method = "cv",
+    number = 10,
+    summaryFunction = defaultSummary
+)
+set.seed(65451)
+svm_linear_grid <- expand.grid(
+    C = Cost
+)
+set.seed(65451)
+svm_lgt_model1 <- train(
+    HELD_INDICATOR ~.,
+    data = svm_train,
+    method = "svmLinear",
+    trControl = svm_gt_control,
+    preProc = c("center", "scale", "nzv"),
+    verbose = F,
+    tuneGrid = svm_linear_grid
+)
+Sys.time()
+
+svm_lgt_model1
+
+Cost = 2^seq(0,2,0.1)
+Cost
+
+set.seed(65451)
+svm_linear_grid2 <- expand.grid(
+    C = Cost
+)
+set.seed(65451)
+svm_lgt_model2 <- train(
+    HELD_INDICATOR ~.,
+    data = svm_train,
+    method = "svmLinear",
+    trControl = svm_gt_control,
+    preProc = c("center", "scale", "nzv"),
+    verbose = F,
+    tuneGrid = svm_linear_grid2
+)
+svm_lgt_pred
+
+set.seed(65451)
+svm_lgt_pred <- predict(
+    svm_lgt_model2,
+    svm_test[, -5]
+)
+
+svm_lgt_pred <- confusionMatrix(
+    data = svm_pred,
+    reference = svm_test[, 5],
+    positive = "Y"
+)
+
+svm_cm
+
+# Radial Based SVM with Tuning Grid #
+set.seed(65451)
+svm_rbf_grid <- expand.grid(
+    C = 2^seq(3,5,0.1),
+    sigma = 2^c(-25,-20,-15,-1,-5,0)
+)
+set.seed(65451)
+sigma_svm_model <- train(
+    HELD_INDICATOR ~.,
+    data = svm_train,
+    method = "svmRadial",
+    trControl = svm_gt_control,
+    preProc = c("center", "scale", "nzv"),
+    verbose = F,
+    tuneGrid = svm_rbf_grid
+)
+
+sigma_svm_model$bestTune
+
+set.seed(65451)
+svm_rbf_pred <- predict(
+    sigma_svm_model,
+    svm_test[, -5]
+)
+
+svm_rbf_cm <- confusionMatrix(
+    svm_rbf_pred,
+    svm_test[, 5],
+    positive = "Y"
+)
+
+svm_rbf_cm
+
+# Radial Based SVM with Random Tuned #
+set.seed(65451)
+svm_rndm_control <- trainControl(
+    method = "cv",
+    number = 10,
+    summaryFunction = defaultSummary,
+    search = "random"
+)
+
+set.seed(65451)
+svm_rndm_model <- train(
+    HELD_INDICATOR ~.,
+    data = svm_train,
+    method = "svmRadial",
+    trControl = svm_rndm_control,
+    preProc = c("center", "scale", "nzv"),
+    verbose = F,
+    tuneLenght = 60
+)
+
+svm_rndm_model$bestTune
+
+set.seed(65451)
+svm_rndm_pred <- predict(
+    svm_rndm_model,
+    svm_test[, -5]
+)
+
+svm_rndm_cm <- confusionMatrix(
+    svm_rndm_pred,
+    svm_test[, 5],
+    positive = "Y"
+)
+
+svm_rndm_cm
+
+
+rm(svm_rndm_control)
+rm(svm_rndm_pred)
+rm(svm_rndm_model)
+rm(svm_rbf_grid)
+rm(svm_rbf_pred)
+rm(sigma_svm_model)
+rm(svm.control)
+rm(svm_train)
+rm(svm_test)
+rm(svm_linear_grid)
+rm(svm_linear_grid2)
+rm(svm_model1)
+rm(svm_model2)
+rm(svm_pred)
+rm(Cost)
+rm(NYC_EMS_SVMSample_Numbers)
+
+##################################################################################
+
 # Mapping
-NYC_EMS_MapData <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",")
+NYC_EMS_MapData.1 <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = "")
 
 NYC_EMS_MapData_Sample <- sample(1:nrow(NYC_EMS_MapData), 10000, replace = F)
 NYC_EMS_MapData_Sample <- NYC_EMS_MapData[NYC_EMS_MapData_Sample, ]
@@ -275,7 +469,7 @@ leaflet() %>%
                 blur = 25,
                 radius = 15)
 
-rm(NYC_EMS_MapData_Sample)
+rm(NYC_EMS_MapSample)
 rm(NYC_EMS_MapData)
 
 # Analysis of Call types & Call duration
@@ -299,10 +493,6 @@ DFB_2017 <- DFB_EMS_Data
 DFB_2017 <- DFB_EMS_Data[ DFB_2017$Date >= as.POSIXct("2017-01-01") & DFB_2017$Date <= as.POSIXct("2017-12-31"), ]
 
 sd(DFB_CallSev_Times[DFB_CallSev_Times$Criticality_Code == 'E', ]$TOC_IA_Mins)
-########### Analysis Results ###########
-# Held up RF model
-varImpPlot(nyc_rf_model)
-heldupCM
 
 ############################################
 
@@ -336,3 +526,23 @@ mean(NYC_Response_Times$NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY)
 NYC_Response_Times <- subset(NYC_Response_Times, NYC_EMS_Data.INCIDENT_RESPONSE_SECONDS_QY <= 360)
 
 write.csv(NYC_Response_Times, "Data/NYC_Response_Times.csv", row.names = F)
+
+########### Analysis Results ###########
+# Confusion Matrices
+# Random Forest
+heldupCMRF
+
+# Random Forest w/ Rose
+heldupRoseCM
+
+# Naive Bayes
+heldupNBCM
+
+# SVM Linear Grid Tuned
+svm_cm
+
+# SVM Radial Grid Tuned
+svm_rbf_cm
+
+# SVM Radial Random Tuned
+svm_rndm_cm
