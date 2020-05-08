@@ -20,13 +20,13 @@ library("mlbench")
 
 ########### Read Datasets ########### 
 DFB_EMS_Data <- fread("Data/DFB_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings= "")
-NYC_EMS_Data <- fread("Data/EMS_Incident_Dispatch_Data.csv", sep = ",", stringsAsFactors = T, na.strings = "") # No longer required to be read
+NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", sep = ",", stringsAsFactors = T, na.strings = "") # No longer required to be read
 ###############################################
 
-########### Reading Cleaned NYC Data ###########
-NYC_EMS_Data <- read.csv("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
-DFB_EMS_Data <- read.csv("Data/NEW_DFB_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
-NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = NA)
+########### Reading Cleaned Datasets ###########
+NYC_EMS_Data <- fread("Data/NYC_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = "")
+DFB_EMS_Data <- read.csv("Data/NEW_DFB_EMS_Data.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = "")
+NYC_EMS_MapSample <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = "")
 
 ############################################ 
 
@@ -35,6 +35,7 @@ str(DFB_EMS_Data)
 
 DFB_EMS_Data$Date <- as.POSIXct(DFB_EMS_Data$Date, format = "%d/%m/%Y") # Changning data format to readable R date format
 
+# Removing irrelevant columns
 DFB_EMS_Data <- DFB_EMS_Data[, -c(2,19,20,21,23,25,27,29,31,33,35,37,39,41)]
 
 # Checking for NA values
@@ -55,12 +56,13 @@ write.csv(DFB_EMS_Data, "Data/NEW_DFB_EMS_Data.csv", row.names = F)
 ########### Data Cleansing NYC ###########
 str(NYC_EMS_Data)
 
+sapply(NYC_EMS_Data, function(x) sum(is.na(x))) # Make sure there are no NA values
+
 # Dropping level in borough - set as unknown and there are only 5 boroughs
 NYC_EMS_Data$BOROUGH <- droplevels(NYC_EMS_Data$BOROUGH, "UNKNOWN")
 
 # Removing final call type unknown
-
-NYC_EMS_Data <- subset(NYC_EMS_Data, FINAL_CALL_TYPE != 'UNKNOW')
+NYC_EMS_Data$FINAL_CALL_TYPE <- droplevels(NYC_EMS_Data$FINAL_CALL_TYPE,'UNKNOW')
 
 # Changing date format
 NYC_EMS_Data$INCIDENT_DATETIME <- as.POSIXct(NYC_EMS_Data$INCIDENT_DATETIME, format = "%m/%d/%Y %I:%M:%S %p")
@@ -114,9 +116,7 @@ write.csv(NYC_EMS_Data, "Data/NYC_EMS_Data.csv", row.names = F)
 
 ########### Functions ###########
 # Obtain Latitude & Longitude from Zip Code
-NYC_EMS_MapSample <- NYC_EMS_Data
-
-data("zipcode")
+zipcode <- read.csv("Data/NYC_ZipCodes.csv")
 
 for (i in 1:nrow(NYC_EMS_MapSample)){
     if(length(zipcode$zip[NYC_EMS_MapSample$ZIPCODE[i] == zipcode$zip]) == 1){
@@ -131,8 +131,7 @@ for (i in 1:nrow(NYC_EMS_MapSample)){
     }
 }
 
-fwrite(NYC_EMS_MapSample, "Data/NYC_EMS_MapData.csv", row.names = F)# Saving the file
-Sys.time()
+write.csv(NYC_EMS_MapSample, "Data/NYC_EMS_MapData.csv", row.names = F)# Saving the file
 rm(i)
 rm(zipcode)
 
@@ -262,6 +261,12 @@ rm(nb_model)
 ##################################################################################
 
 ########### ML Model 3 - SVM to Predict whether the incident will be held up ###########
+
+#######################################################################################
+
+####### N.B. - THE CODE FOR SVM MACHINE LEARNING MODEL (LINE 271-447) IS ADAPTED FROM LAB FROM COLLEGE LAB LECTURED BY MR. NOEL COSGRAVE OF THE NATIONAL COLLEGE OF IRELAND ###### 
+
+#######################################################################################
 NYC_EMS_SVMSample <- NYC_EMS_Data
 
 sapply(NYC_EMS_SVMSample, function(x) sum(is.na(x))) # Make sure there are no NA values
@@ -315,7 +320,6 @@ svm_lgt_model1 <- train(
     verbose = F,
     tuneGrid = svm_linear_grid
 )
-Sys.time()
 
 svm_lgt_model1
 
@@ -326,6 +330,7 @@ set.seed(65451)
 svm_linear_grid2 <- expand.grid(
     C = Cost
 )
+
 set.seed(65451)
 svm_lgt_model2 <- train(
     HELD_INDICATOR ~.,
@@ -441,26 +446,27 @@ rm(NYC_EMS_SVMSample_Numbers)
 
 ##################################################################################
 
-# Mapping
-NYC_EMS_MapData.1 <- fread("Data/NYC_EMS_MapData.csv", header = T, sep = ",", stringsAsFactors = T, na.strings = "")
+NYC_EMS_MapSample$Latitude <- as.numeric(NYC_EMS_MapSample$Latitude)
+NYC_EMS_MapSample$Longitude <- as.numeric(NYC_EMS_MapSample$Longitude)
 
-NYC_EMS_MapData_Sample <- sample(1:nrow(NYC_EMS_MapData), 10000, replace = F)
-NYC_EMS_MapData_Sample <- NYC_EMS_MapData[NYC_EMS_MapData_Sample, ]
+# Mapping
+NYC_EMS_MapData <- sample(1:nrow(NYC_EMS_MapSample), 4000, replace = F)
+NYC_EMS_MapData <- NYC_EMS_MapSample[NYC_EMS_MapData, ]
 
 # FDNY EMS Calls in Cluster Map
 leaflet() %>%
     addTiles() %>%
-    addCircleMarkers( lat = NYC_EMS_MapData_Sample$Latitude, 
-                      lng = NYC_EMS_MapData_Sample$Longitude,
-                      popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE,
+    addCircleMarkers(lat = NYC_EMS_MapData$Latitude, 
+                      lng = NYC_EMS_MapData$Longitude,
+                      popup = NYC_EMS_MapData$FINAL_CALL_TYPE,
                       clusterOptions = markerClusterOptions())
 
 # FDNY EMS Calls Map
 leaflet() %>%
     addTiles() %>%
-    addMarkers( lat = NYC_EMS_MapData_Sample$Latitude, 
-                      lng = NYC_EMS_MapData_Sample$Longitude,
-                      popup = NYC_EMS_MapData_Sample$FINAL_CALL_TYPE)
+    addMarkers( lat = NYC_EMS_MapData$Latitude, 
+                      lng = NYC_EMS_MapData$Longitude,
+                      popup = NYC_EMS_MapData$FINAL_CALL_TYPE)
 
 leaflet() %>%
     addTiles() %>%
@@ -546,3 +552,6 @@ svm_rbf_cm
 
 # SVM Radial Random Tuned
 svm_rndm_cm
+
+rm(NYC_EMS_Data)
+rm(DFB_EMS_Data)
